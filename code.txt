@@ -25,3 +25,75 @@ SELECT CASE WHEN trade_type_name = 'Импорт' THEN 'Объем импорт�
 		 GROUP BY 1, 2, 3
 		 WINDOW w AS(PARTITION BY tt.trade_type_name ORDER BY pt.period_type_id)) AS tb
  WHERE weight_t_aft IS NOT NULL;
+ 
+ 
+ ------------------------------------------------------------------------------------------------------------------------------------
+-- QUESTION 2
+-- Which goods and from which country of origin were most affected by imposing sanctions (in weight terms)?
+------------------------------------------------------------------------------------------------------------------------------------
+SELECT position_name,
+	   country_name,
+	   trade_type_name,
+	   TO_CHAR(("lead" - "sum") / 1000, '9 999 999 999.99') AS abs_increase_t
+  FROM (SELECT p.position_name,
+			   c.country_name,
+			   tt.trade_type_name,
+			   st.period_type_id,
+			   SUM(weight_kg),
+			   LEAD(SUM(weight_kg)) OVER(PARTITION BY p.position_name, c.country_name, tt.trade_type_name ORDER BY st.period_type_id)
+		  FROM sanc_trade AS st 
+		  	   JOIN positions AS p USING(position_id)
+		  	   JOIN countries AS c USING(country_id)
+		  	   JOIN trade_type AS tt USING(trade_type_id)
+		 GROUP BY 1, 2, 3, 4) AS tb
+ WHERE period_type_id = 1
+   AND "lead" IS NOT NULL
+ ORDER BY 4 DESC;
+ 
+
+------------------------------------------------------------------------------------------------------------------------------------
+-- QUESTION 3
+-- Have the volumes of import and export of sanctioned goods changed after the introduction of Russian sanctions (in weight terms)?
+------------------------------------------------------------------------------------------------------------------------------------
+SELECT position_name "Наименование товара",
+	   country_name AS "Страна",
+	   TO_CHAR(ratio, '99.99" %"') AS "Доля импорта по товару до санцкий",
+	   TO_CHAR(COALESCE(aft_ratio, 0), '99.99" %"') AS "Доля импорта по товару после санкций" 
+  FROM (SELECT position_name,
+			   country_name,
+			   period_type_id,
+			   ratio,
+			   LEAD(ratio) OVER(PARTITION BY position_name, country_name ORDER BY period_type_id) AS aft_ratio
+		  FROM (SELECT position_name,
+					   country_name,
+					   period_type_id,
+					   ROUND(country_sum / SUM(country_sum) OVER(PARTITION BY position_name, period_type_id) * 100, 2) AS ratio
+				  FROM (SELECT p.position_name,
+							   c.country_name,
+							   SUM(st.weight_kg) AS country_sum,
+							   CASE WHEN c.country_id IN (1, 2, 21, 24, 36, 50, 57, 60, 76, 78, 79, 85, 88, 105, 110, 	-- before snctions for goods is not the same for countries
+							   							  112, 123, 140, 164, 165, 170, 189, 190, 192, 221, 223, 227,
+							   							  231, 234, 242, 145) AND st.month_start_date <= '2014-08-07'
+							   							  THEN 1
+							   		WHEN c.country_id IN (1, 2, 21, 24, 36, 50, 57, 60, 76, 78, 79, 85, 88, 105, 110, 
+							   							  112, 123, 140, 164, 165, 170, 189, 190, 192, 221, 223, 227,
+							   							  231, 234, 242, 145) AND st.month_start_date > '2014-08-07'
+							   							  THEN 2
+							   		WHEN c.country_id IN (4, 77, 111, 230) AND st.month_start_date <= '2015-08-13'
+							   							  THEN 1
+							   		WHEN c.country_id IN (4, 77, 111, 230) AND st.month_start_date > '2015-08-13'
+							   							  THEN 2
+							   		WHEN c.country_id IN (216) AND st.month_start_date < '2016-01-01'
+							   							  THEN 1
+							   		WHEN c.country_id IN (216) AND st.month_start_date >= '2016-01-01'
+							   							  THEN 2 END AS period_type_id
+						  FROM sanc_trade AS st 
+						  	   JOIN positions AS p USING(position_id)
+						  	   JOIN countries AS c USING(country_id)
+						  	   JOIN trade_type AS tt USING(trade_type_id)
+						  	   JOIN period_type AS pt USING(period_type_id)
+						 WHERE tt.trade_type_name = 'Импорт'
+						   AND c.incl_date_id IS NOT NULL
+						 GROUP BY 1, 2, 4) AS tb1) AS tb2) AS tb3
+ WHERE period_type_id = 1	-- not to exclude values only by NULL values, but COALESCE 0 if we had no import after sanctions
+ ORDER BY 4 DESC;
