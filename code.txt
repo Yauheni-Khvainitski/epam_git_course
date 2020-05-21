@@ -1,0 +1,27 @@
+------------------------------------------------------------------------------------------------------------------------------------
+-- QUESTION 1
+-- Have the volumes of import and export of sanctioned goods changed after the introduction of Russian sanctions (in weight terms)?
+------------------------------------------------------------------------------------------------------------------------------------
+
+SELECT CASE WHEN trade_type_name = 'Импорт' THEN 'Объем импорта, тонн'
+			ELSE 'Объем экспорта, тонн' END AS " ",
+	   weight_t_bef AS "До санкций",
+	   weight_t_aft AS "После санкций",
+	   diff AS "Абсолютный прирост, тонн",
+	   rate_of_increase AS "Темп прироста"
+  FROM (SELECT tt.trade_type_name,
+			   pt.period_type_id,
+			   pt.period_type_name,
+			   TO_CHAR(SUM(weight_kg)/1000, '9 999 999 999.99') AS weight_t_bef,
+			   TO_CHAR(LEAD(SUM(weight_kg) FILTER(WHERE year_id != 2019 OR month_num NOT BETWEEN 5 AND 12)/1000)	-- filter for the comparability of the periods
+			   		   OVER w, '9 999 999 999.99') AS weight_t_aft,
+			   TO_CHAR((LEAD(SUM(weight_kg) FILTER(WHERE year_id != 2019 OR month_num NOT BETWEEN 5 AND 12))
+			   		   OVER w - SUM(weight_kg))/1000, '9 999 999 999.99') AS diff,
+			   TO_CHAR((LEAD(SUM(weight_kg) FILTER(WHERE year_id != 2019 OR month_num NOT BETWEEN 5 AND 12))
+			   		   OVER w - SUM(weight_kg)) / SUM(weight_kg) * 100, '999.99" %"') AS rate_of_increase
+		  FROM sanc_trade AS st
+		       JOIN trade_type AS tt USING(trade_type_id)
+		       JOIN period_type AS pt USING(period_type_id)
+		 GROUP BY 1, 2, 3
+		 WINDOW w AS(PARTITION BY tt.trade_type_name ORDER BY pt.period_type_id)) AS tb
+ WHERE weight_t_aft IS NOT NULL;
