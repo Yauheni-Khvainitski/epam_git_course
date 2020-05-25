@@ -87,13 +87,3 @@ SELECT position_name "Наименование товара",
 							   							  THEN 1
 							   		WHEN c.country_id IN (216) AND st.month_start_date >= '2016-01-01'
 							   							  THEN 2 END AS period_type_id
-						  FROM sanc_trade AS st 
-						  	   JOIN positions AS p USING(position_id)
-						  	   JOIN countries AS c USING(country_id)
-						  	   JOIN trade_type AS tt USING(trade_type_id)
-						  	   JOIN period_type AS pt USING(period_type_id)
-						 WHERE tt.trade_type_name = 'Импорт'
-						   AND c.incl_date_id IS NOT NULL
-						 GROUP BY 1, 2, 4) AS tb1) AS tb2) AS tb3
- WHERE period_type_id = 1	-- not to exclude values only by NULL values, but COALESCE 0 if we had no import after sanctions
- ORDER BY 4 DESC;
